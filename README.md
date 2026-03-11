@@ -1,127 +1,110 @@
-Vehicle Classification Project
+# Vehicle Classification Project
+
 This repository contains a complete vehicle classification pipeline using a fine-tuned ResNet-18 model on a 12-class imbalanced dataset (auto-rickshaw, bicycle, bus, car, e-rickshaw, mini-bus, mini-truck, motorcycle, rickshaw, tractor, truck, van). The final model achieves ~84-85% validation accuracy and weighted F1 of 0.84, with ONNX export for deployment.
-​
-
-Key improvements include data cleaning (duplicates/blur removal), class-weighted loss, dropout, two-phase fine-tuning, and augmentations to handle imbalance and overfitting.
-​
-
-Project Structure
-text
-models/vehicledatasetvehicletest4/
-├── bestvalloss.pt          # Best PyTorch model checkpoint
-├── vehicletest.onnx        # Exported ONNX model
-├── classes.txt             # Class names mapping
-├── classificationreport.txt # Final metrics
-├── confusionmatrix.png     # Confusion matrix plot
-└── learningcurves.png      # Training curves
-
-analysisoutputs/            # Data analysis CSVs (classcounts.csv, etc.)
-
-scripts/                    # All Python scripts
-├── dataanalysiscleaning.py
-├── isolateleakage.py
-├── datapreprocessing.py
-├── newdataprocessing.py
-├── trainmodel.py          # Baseline
-├── trainmodel2.py         # Extended training
-├── trainmodel3.py
-├── trainmodelfinal.py     # Final run
-├── exportonnx.py
-└── verifymodel.py
-
-runs/pred/                  # Verification predictions
-Requirements
+The pipeline includes:
+1. Data analysis and cleaning
+2. Data preprocessing and augmentation
+3. Two-phase transfer learning (freeze → fine-tune)
+4. Model export to ONNX
+5. ONNX verification script
+## Requirements
 Python 3.8+
 
-PyTorch (with torchvision, torchaudio)
+pip install torch torchvision numpy pandas matplotlib seaborn scikit-learn onnx onnxruntime opencv-python tqdm imagehash
 
-ONNX, ONNXRuntime
+- If using GPU, install PyTorch with CUDA support from
+https://pytorch.org
 
-OpenCV, Pillow, NumPy, Pandas, Matplotlib, Scikit-learn
+## Dataset
+1. 3,364 images (2,719 train, 645 val) across 12 classes
+2. Heavily imbalanced: trucks and vans are dominant; mini-bus/tractor rare.
+3. Input size: 180x180 (fixed for ONNX export)
+4. Place raw dataset in expected location; scripts handle cleaning and preprocessing
 
-Tqdm for progress bars
+## Pipeline
+1. Data analysis and Cleaning
+Run the analysis script to inspect dataset quality.
+- python scripts/data_analysis_cleaning.py
+2. Data Preprocessing
+Prepare dataloaders and generate class metadata.
+- python scripts/data_preprocessing.py
+- python scripts/new_data_processing.py
 
-Install via conda/pip:
+   Expected output:
 
-text
-pip install torch torchvision torchaudio opencv-python pillow numpy pandas matplotlib scikit-learn tqdm onnx onnxruntime
-No specific CUDA version noted; runs on CPU/GPU.
-​
+- Train Batch Images Shape: torch.Size([32, 3, 180, 180])
+- Train Batch Labels Shape: torch.Size([32])
 
-Dataset
-3,364 images (2,719 train, 645 val) across 12 classes.
+   This step also generates: classes.txt, which stores the class order used by the model.
 
-Heavily imbalanced (e.g., trucks/vans dominant; mini-bus/tractor rare).
+3. Train the Model
 
-Images resized to 180x180; mixed JPG/PNG formats.
+Training pipeline:
 
-Place raw dataset in expected location (e.g., dataset/raw/); scripts handle cleaning/preprocessing.
-​
+Phase 1:
+  Backbone frozen, 
+  Train classifier head
 
-Setup and Data Preparation
-Run from project root:
+Phase 2:
+  Unfreeze backbone,
+  Fine-tune entire network.
+  
+Train the classifier using transfer learning.
 
-Analyze and clean data:
+-python train_model.py
 
-text
-python scripts/dataanalysiscleaning.py
-python scripts/isolateleakage.py
-Preprocess (choose one based on training script):
+-python train_model2.py
 
-text
-python scripts/datapreprocessing.py    # For trainmodel.py/trainmodel2.py
-# OR
-python scripts/newdataprocessing.py    # For trainmodel3.py/trainmodelfinal.py (recommended)
-Outputs processed datasets and classes.txt.
-​
+-python train_model3.py
 
-Training
-Reproduce final results (~85% val acc, F1 0.84):
+-python train_model_final.py
 
-text
-python scripts/trainmodelfinal.py
-Two-phase: Freeze backbone 5 epochs (LR 1e-4), then unfreeze (LR 1e-5).
+  
+All outputs are saved in: "/Submission/analysis_outputs" , "Submission/models"
 
-AdamW, weight decay 3e-4, ReduceLROnPlateau, early stopping (patience 7).
+4. Export Model to ONNX:
+   
+Convert the trained PyTorch model into ONNX format.
 
-Batch 32, weighted CE loss (inverse freq, max weight 10.0), dropout 0.5.
 
-Saves bestvalloss.pt, history, report, plots to models/vehicledatasetvehicletest4/.
-​
+python scripts/export_onnx.py -m "models/vehicle_dataset/vehicle_test_weighted_loss1/best_val_loss.pt" -o "models/vehicle_dataset/vehicle_test_weighted_loss1/vehicle_test.onnx"
 
-Other variants:
+This produces:
 
-text
-python scripts/trainmodel.py     # Baseline 20 epochs
-python scripts/trainmodel2.py    # 50 epochs early stop
-python scripts/trainmodel3.py    # Weighted loss prototype
-Export and Verification
-Export to ONNX:
+vehicle_test.onnx
 
-text
-python scripts/exportonnx.py -m models/vehicledatasetvehicletest4/bestvalloss.pt -o models/vehicledatasetvehicletest4/vehicletest.onnx
-Verify (place autorickshaw.png, car.png, van.png in root):
+5. Verify ONNX Model
+   
+Run the verification script to test the ONNX model.
 
-text
-python scripts/verifymodel.py -m models/vehicledatasetvehicletest4/vehicletest.onnx -c models/vehicledatasetvehicletest4/classes.txt -s 180
-Expected: 2/3 correct (auto-rickshaw 0.37, car 0.99; van→truck 0.68).
-​
+python scripts/verify_model.py -m "models/vehicle_dataset/vehicle_test_weighted_loss1/vehicle_test.onnx" -c "models/vehicle_dataset/vehicle_test_weighted_loss1/classes.txt" -s 180
 
-Results Summary
-Metric	Value
-Metric	Value
-Val Accuracy	0.84-0.85
-Weighted F1	0.84
-Top Classes (F1)	Motorcycle 0.96, Bicycle 0.95, Tractor 1.00
-Weak Classes	Mini-bus 0.50
-Common Confusions	Truck↔Bus/Van/Mini-truck, Auto-rickshaw↔Truck 
-​
-Confusion matrix and curves in models/.../. Model excels on distinct shapes; struggles with similar large vehicles.
-​
+Expected output:
 
-Notes
-Input size fixed at 180x180 for export.
+input shape [1, 3, 180, 180]
 
-Run on GPU for speed (e.g., Kaggle/Colab).
+output shape [1, 12]
 
-Future: More data for rare classes, advanced augs (MixUp), ensemble.
+auto-rickshaw 0.37,
+
+car 0.99,
+
+truck 0.68
+
+Prediction images are saved in:  runs/pred/
+
+# Results:
+| Metric       | Value                                                 |
+| ------------ | ----------------------------------------------------- |
+| Val Accuracy | 0.84-0.85                                             |
+| Weighted F1  | 0.84                                                  |
+| Top Classes  | Motorcycle 0.96, Bicycle 0.95, Tractor 1.00           |
+| Weak Classes | Mini-bus 0.50                                         |
+| Confusions   | Truck↔Bus/Van/Mini-truck, Auto-rickshaw↔Truck         |
+
+Final result saved in : "Submission/models/vehicle_test_weighted_loss1"
+
+
+
+
+ 
